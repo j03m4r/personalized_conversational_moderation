@@ -1,103 +1,106 @@
-import Image from "next/image";
+"use client";
+import ChatInterface from "@/components/ChatInterface";
+import InitialResponsePhase, { loadInitialResponse } from "@/components/InitialResponsePhase";
+import OpinionFarmingPhase from "@/components/OpinionFarmingPhase";
+import { useEffect, useState } from "react";
+
+export enum EXPERIMENT_PHASES {
+    OPINION_FARMING = 0,
+    INITIAL_RESPONSE = 1,
+    DIALOGUE = 2,
+    REWRITE_RESPONSE = 3
+};
+
+export function savePhase(phase: EXPERIMENT_PHASES) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('current-phase', phase.toString());
+  }
+}
+
+export function loadPhase(): EXPERIMENT_PHASES {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('current-phase');
+    if (saved) {
+      try {
+        return Number(saved) as EXPERIMENT_PHASES;
+      } catch (error) {
+        console.error('Failed to fetch current phase:', error);
+        return EXPERIMENT_PHASES.OPINION_FARMING;
+      }
+    }
+  }
+  return EXPERIMENT_PHASES.OPINION_FARMING;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    const [phase, setPhase] = useState<EXPERIMENT_PHASES>(EXPERIMENT_PHASES.OPINION_FARMING);
+    const [lastSavedPhase, setLastSavedPhase] = useState<EXPERIMENT_PHASES>(EXPERIMENT_PHASES.OPINION_FARMING)
+    const [phasesComplete, setPhasesComplete] = useState<boolean[]>([false, false, false, false]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    const onPhaseCompletionChange = (_phase: EXPERIMENT_PHASES, isComplete: boolean) => {
+        let temp = [...phasesComplete]
+        temp[_phase] = isComplete;
+        setPhasesComplete(temp);
+
+        if (isComplete && _phase > lastSavedPhase) {
+            savePhase(_phase);
+            setLastSavedPhase(_phase);
+        }
+    }
+
+    useEffect(() => {
+        const currentPhase = loadPhase();
+        setLastSavedPhase(currentPhase);
+        setPhase(currentPhase);
+        savePhase(currentPhase);
+    }, [])
+
+    const goToNextPhase = () => {
+        const nextPhase = phase + 1;
+        if (nextPhase === EXPERIMENT_PHASES.DIALOGUE) {
+            const initialResponse = loadInitialResponse()
+            const isUnproductive = isUnproductiveMessage(initialResponse);
+            if (!isUnproductive) return
+        }
+
+        setPhase(nextPhase);
+        
+        if (nextPhase > lastSavedPhase) {
+            savePhase(nextPhase);
+            setLastSavedPhase(nextPhase);
+        }
+
+    };
+
+    const isUnproductiveMessage = (message: string) => {
+        // implement at some point
+        return true;
+    }
+
+    return (
+        <div className="flex flex-col h-full py-[10vh]">
+            <div className="flex h-full w-full pb-[1vh]">
+                {phase === EXPERIMENT_PHASES.OPINION_FARMING ? (
+                    <OpinionFarmingPhase onPhaseCompletionChange={onPhaseCompletionChange} />                    
+                ) : phase === EXPERIMENT_PHASES.INITIAL_RESPONSE ? (
+                    <InitialResponsePhase onPhaseCompletionChange={onPhaseCompletionChange} />
+                ) : phase === EXPERIMENT_PHASES.DIALOGUE ? (
+                    <ChatInterface />
+                ) : phase === EXPERIMENT_PHASES.REWRITE_RESPONSE ? (
+                    <div>Rewrite Response Phase</div>
+                ) : null}
+            </div>
+            <div
+                className="flex justify-between gap-x-[1rem] max-w-[calc(1280px+1rem)] py-[.5rem] rounded-md px-[.5rem] fixed bottom-[1vh] left-1/2 -translate-x-1/2 bg-white/5 backdrop-blur-md border border-white/10">
+                <button onClick={goToNextPhase} disabled={!phasesComplete[phase] ||
+                    phase === EXPERIMENT_PHASES.REWRITE_RESPONSE} className="disabled:opacity-25
+                        disabled:pointer-events-none cursor-pointer w-[20vh] h-[10vh] flex justify-center items-center rounded-md border border-black
+                        hover:bg-black transition-all duration-200 ease-in-out hover:text-white">next</button>
+            </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    );
 }
+                // <button onClick={() => setPhase((prev) => prev - 1)}
+                //     disabled={phase === EXPERIMENT_PHASES.OPINION_FARMING} className="disabled:opacity-25
+                //         disabled:pointer-events-none cursor-pointer px-10 py-5 rounded-md border border-black
+                //         hover:bg-black transition-all duration-200 ease-in-out hover:text-white">prev</button>
